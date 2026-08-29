@@ -1,4 +1,4 @@
-use image::{codecs::{jpeg::JpegEncoder, png::{CompressionType, FilterType, PngEncoder}}, imageops::FilterType as ResizeFilter, DynamicImage, GenericImageView, ImageEncoder};
+use image::{codecs::{avif::AvifEncoder, jpeg::JpegEncoder, png::{CompressionType, FilterType, PngEncoder}}, imageops::FilterType as ResizeFilter, DynamicImage, GenericImageView, ImageEncoder};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::{Path, PathBuf}, process::Command};
 use tauri_plugin_dialog::DialogExt;
@@ -44,7 +44,7 @@ async fn pick_images(app: tauri::AppHandle) -> Result<Vec<String>, String> {
     let files = app
         .dialog()
         .file()
-        .add_filter("Images", &["jpg", "jpeg", "png", "webp"])
+        .add_filter("Images", &["jpg", "jpeg", "png", "webp", "avif"])
         .blocking_pick_files();
 
     Ok(files
@@ -121,7 +121,7 @@ fn process_one(input: &Path, output_dir: &Path, options: &ProcessOptions) -> Res
 
     let input_ext = input.extension().and_then(|s| s.to_str()).unwrap_or("jpg").to_lowercase();
     let mut output_format = if options.format == "same" { normalize_format(&input_ext) } else { normalize_format(&options.format) };
-    if !matches!(output_format.as_str(), "jpg" | "png" | "webp") { output_format = "jpg".to_string(); }
+    if !matches!(output_format.as_str(), "jpg" | "png" | "webp" | "avif") { output_format = "jpg".to_string(); }
 
     let target_bytes = options.target_kb.map(|kb| kb.saturating_mul(1024));
     let (encoded, final_img, quality_used) = encode_with_target(img, &output_format, options.quality.clamp(1, 100), target_bytes)?;
@@ -213,6 +213,7 @@ fn encode_image(img: &DynamicImage, format: &str, quality: u8) -> Result<Vec<u8>
         "jpg" => encode_jpeg(img, quality),
         "png" => encode_png(img),
         "webp" => encode_webp(img, quality),
+        "avif" => encode_avif(img, quality),
         _ => Err(format!("Unsupported output format: {format}")),
     }
 }
@@ -249,6 +250,15 @@ fn encode_webp(img: &DynamicImage, quality: u8) -> Result<Vec<u8>, String> {
     let encoder = webp::Encoder::from_rgba(rgba.as_raw(), rgba.width(), rgba.height());
     let memory = encoder.encode(quality as f32);
     Ok(memory.to_vec())
+}
+
+fn encode_avif(img: &DynamicImage, quality: u8) -> Result<Vec<u8>, String> {
+    let rgba = img.to_rgba8();
+    let mut out = Vec::new();
+    let encoder = AvifEncoder::new_with_speed_quality(&mut out, 9, quality.clamp(1, 100));
+    encoder.write_image(rgba.as_raw(), rgba.width(), rgba.height(), image::ExtendedColorType::Rgba8)
+        .map_err(|e| format!("AVIF encode failed: {e}"))?;
+    Ok(out)
 }
 
 fn sanitize_suffix(value: &str) -> String {
@@ -309,6 +319,16 @@ mod tests {
         let decoded = image::load_from_memory(&data).unwrap().to_rgba8();
         let px = decoded.get_pixel(0, 0);
         assert!(px[0] > 200 && px[1] > 200 && px[2] > 200, "expected near-white background, got {:?}", px);
+    }
+
+    #[test]
+    fn avif_encode_decode_roundtrips_dimensions_and_alpha() {
+        let img = solid_image(20, 16, [30, 120, 90, 128]);
+        let data = encode_avif(&img, 70).unwrap();
+        let decoded = image::load_from_memory(&data).unwrap().to_rgba8();
+        assert_eq!(decoded.dimensions(), (20, 16));
+        let px = decoded.get_pixel(0, 0);
+        assert!(px[3] > 100 && px[3] < 156, "expected alpha near 128, got {}", px[3]);
     }
 
     #[test]
@@ -403,6 +423,39 @@ mod tests {
         assert!(results[0].error.is_none(), "expected good image to succeed: {:?}", results[0].error);
         assert!(results[0].output_path.is_some());
         assert!(results[1].error.is_some(), "expected missing image to report an error, not abort the batch");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn conversion_png_to_avif_and_avif_to_jpg_via_process_images() {
+        let dir = temp_dir();
+        let png_path = dir.join("source.png");
+        solid_image(24, 24, [200, 40, 40, 255]).save_with_format(&png_path, image::ImageFormat::Png).unwrap();
+        let out_dir = dir.join("out");
+
+        let to_avif = ProcessOptions {
+            format: "avif".into(), quality: 70, target_kb: None,
+            resize_enabled: false, width: None, height: None, keep_aspect: true,
+            suffix: "-avif".into(), overwrite: true,
+        };
+        let results = process_images(vec![png_path.to_string_lossy().to_string()], out_dir.to_string_lossy().to_string(), to_avif).unwrap();
+        assert!(results[0].error.is_none(), "PNG->AVIF failed: {:?}", results[0].error);
+        assert_eq!(results[0].format, "avif");
+        let avif_path = results[0].output_path.clone().unwrap();
+
+        let infos = get_images_info(vec![avif_path.clone()]).unwrap();
+        assert_eq!(infos[0].width, 24);
+        assert_eq!(infos[0].height, 24);
+
+        let to_jpg = ProcessOptions {
+            format: "jpg".into(), quality: 80, target_kb: None,
+            resize_enabled: false, width: None, height: None, keep_aspect: true,
+            suffix: "-jpg".into(), overwrite: true,
+        };
+        let jpg_results = process_images(vec![avif_path], out_dir.to_string_lossy().to_string(), to_jpg).unwrap();
+        assert!(jpg_results[0].error.is_none(), "AVIF->JPG failed: {:?}", jpg_results[0].error);
+        assert_eq!(jpg_results[0].format, "jpg");
+
         let _ = fs::remove_dir_all(&dir);
     }
 

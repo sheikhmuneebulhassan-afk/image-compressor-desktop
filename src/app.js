@@ -106,8 +106,8 @@
 
   async function addPaths(paths) {
     if (!invoke) return toast('Desktop runtime is required to read file paths.', 'error');
-    const valid = [...new Set(paths)].filter(p => /\.(jpe?g|png|webp)$/i.test(p));
-    if (!valid.length) return toast('Choose JPG, PNG or WebP images.', 'error');
+    const valid = [...new Set(paths)].filter(p => /\.(jpe?g|png|webp|avif)$/i.test(p));
+    if (!valid.length) return toast('Choose JPG, PNG, WebP or AVIF images.', 'error');
     try {
       const infos = await invoke('get_images_info', { paths: valid });
       const existing = new Set(state.files.map(f => f.path));

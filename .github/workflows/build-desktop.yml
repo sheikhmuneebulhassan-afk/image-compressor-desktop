@@ -7,26 +7,20 @@ on:
       - 'v*'
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-latest
-            args: '--bundles nsis,msi'
-          - platform: macos-latest
-            args: '--target universal-apple-darwin --bundles dmg,app'
-
-    runs-on: ${{ matrix.platform }}
+  build-windows:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
-      - name: Add macOS universal targets
-        if: matrix.platform == 'macos-latest'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Install AVIF build tools
+        shell: pwsh
+        run: |
+          choco install nasm pkgconfiglite -y
+          pip install meson ninja
       - name: Install frontend dependencies
         run: npm install
       - name: Build installers
@@ -34,14 +28,104 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: ${{ matrix.args }}
+          args: '--bundles nsis,msi'
       - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
-          name: image-compressor-${{ runner.os }}
+          name: image-compressor-Windows
           path: |
             src-tauri/target/**/release/bundle/**/*.exe
             src-tauri/target/**/release/bundle/**/*.msi
-            src-tauri/target/**/release/bundle/**/*.dmg
-            src-tauri/target/**/release/bundle/**/*.app
+          if-no-files-found: error
+
+  build-macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install AVIF build tools
+        run: brew install meson ninja nasm pkgconf
+      - name: Install frontend dependencies
+        run: npm install
+      - name: Build app bundle (arm64)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: '--target aarch64-apple-darwin --bundles app'
+      - name: Upload arm64 app
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app-arm64
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: error
+
+  build-macos-x64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install AVIF build tools
+        run: brew install meson ninja nasm pkgconf
+      - name: Install frontend dependencies
+        run: npm install
+      - name: Build app bundle (x86_64)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: '--target x86_64-apple-darwin --bundles app'
+      - name: Upload x86_64 app
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app-x64
+          path: src-tauri/target/x86_64-apple-darwin/release/bundle/macos/*.app
+          if-no-files-found: error
+
+  package-macos-universal:
+    needs: [build-macos-arm64, build-macos-x64]
+    runs-on: macos-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-app-arm64
+          path: arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-app-x64
+          path: x64
+      - name: Combine into a universal binary
+        run: |
+          set -euo pipefail
+          APP_NAME=$(basename "$(ls -d arm64/*.app)")
+          cp -R "arm64/$APP_NAME" "./$APP_NAME"
+          ARM64_BIN="./$APP_NAME/Contents/MacOS/$(ls "arm64/$APP_NAME/Contents/MacOS")"
+          X64_BIN="x64/$APP_NAME/Contents/MacOS/$(ls "x64/$APP_NAME/Contents/MacOS")"
+          UNIVERSAL_BIN="./$APP_NAME/Contents/MacOS/$(ls "arm64/$APP_NAME/Contents/MacOS")"
+          lipo -create "$ARM64_BIN" "$X64_BIN" -output "$UNIVERSAL_BIN"
+          lipo -info "$UNIVERSAL_BIN"
+          codesign --force --deep -s - "./$APP_NAME"
+          echo "APP_NAME=$APP_NAME" >> "$GITHUB_ENV"
+      - name: Build DMG
+        run: |
+          set -euo pipefail
+          STAGING="dmg-staging"
+          mkdir -p "$STAGING"
+          cp -R "./$APP_NAME" "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          VOLNAME="${APP_NAME%.app}"
+          hdiutil create -volname "$VOLNAME" -srcfolder "$STAGING" -ov -format UDZO "${VOLNAME}_universal.dmg"
+      - name: Upload universal build
+        uses: actions/upload-artifact@v4
+        with:
+          name: image-compressor-macOS
+          path: |
+            ./*.dmg
+            ./*.app
           if-no-files-found: error

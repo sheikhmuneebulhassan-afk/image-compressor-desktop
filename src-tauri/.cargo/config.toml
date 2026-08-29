@@ -1,0 +1,4 @@
+[env]
+# Force dav1d (AVIF decode) to build from source as a static library instead of
+# linking a system dylib, so the packaged app has no external runtime dependency.
+SYSTEM_DEPS_DAV1D_BUILD_INTERNAL = "always"

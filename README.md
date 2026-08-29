@@ -4,9 +4,9 @@ A simple offline Windows + macOS image utility built with Tauri 2 and Rust.
 
 ## Included features
 
-- JPG / JPEG / PNG / WebP input
-- JPG / PNG / WebP output
-- Quality control for JPG and WebP
+- JPG / JPEG / PNG / WebP / AVIF input
+- JPG / PNG / WebP / AVIF output
+- Quality control for JPG, WebP and AVIF
 - Target-KB compression (automatically lowers quality and, only when necessary, dimensions)
 - Resize with optional aspect-ratio preservation
 - Batch processing
