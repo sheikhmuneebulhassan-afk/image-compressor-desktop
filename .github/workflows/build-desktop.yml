@@ -15,7 +15,7 @@ jobs:
           - platform: windows-latest
             args: '--bundles nsis,msi'
           - platform: macos-latest
-            args: '--bundles dmg,app'
+            args: '--target universal-apple-darwin --bundles dmg,app'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -24,6 +24,9 @@ jobs:
         with:
           node-version: 22
       - uses: dtolnay/rust-toolchain@stable
+      - name: Add macOS universal targets
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
       - name: Install frontend dependencies
         run: npm install
       - name: Build installers
