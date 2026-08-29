@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <title>Image Compressor</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32"><rect x="3" y="3" width="26" height="26" rx="8"/><path d="M9 18.5h5.2l2.1-7 2.2 10 1.9-6H23"/></svg>
+        </div>
+        <div>
+          <strong>Image Compressor</strong>
+          <span>Offline desktop utility</span>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="workspace">Compress & Convert</button>
+        <button class="nav-item" data-view="history">History</button>
+        <button class="nav-item" data-view="settings">Settings</button>
+      </nav>
+
+      <div class="privacy-note">
+        <span class="status-dot"></span>
+        <div><strong>100% Offline</strong><small>Your images stay on this computer.</small></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <section id="workspaceView" class="view active">
+        <header class="topbar">
+          <div>
+            <h1>Compress, convert and resize images</h1>
+            <p>Fast local processing for JPG, PNG and WebP.</p>
+          </div>
+          <div class="topbar-actions">
+            <button id="clearBtn" class="btn ghost" disabled>Clear</button>
+            <button id="chooseBtn" class="btn primary">Choose Images</button>
+          </div>
+        </header>
+
+        <section id="dropzone" class="dropzone" tabindex="0">
+          <div class="drop-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0 4.5 4.5M12 4 7.5 8.5M5 15.5v2.2A2.3 2.3 0 0 0 7.3 20h9.4a2.3 2.3 0 0 0 2.3-2.3v-2.2"/></svg>
+          </div>
+          <h2>Drop images here</h2>
+          <p>or click to browse files</p>
+          <span>JPG, JPEG, PNG, WEBP</span>
+        </section>
+
+        <section id="workspace" class="workspace hidden">
+          <div class="panel files-panel">
+            <div class="panel-heading">
+              <div><h3>Selected images</h3><span id="fileCount">0 images</span></div>
+              <button id="addMoreBtn" class="link-btn">+ Add more</button>
+            </div>
+            <div id="fileList" class="file-list"></div>
+          </div>
+
+          <aside class="panel controls-panel">
+            <div class="panel-heading"><div><h3>Output settings</h3><span>Applied to all selected images</span></div></div>
+
+            <div class="field">
+              <label for="format">Output format</label>
+              <select id="format">
+                <option value="same">Keep original format</option>
+                <option value="jpg">JPG</option>
+                <option value="png">PNG</option>
+                <option value="webp">WebP</option>
+              </select>
+            </div>
+
+            <div class="field">
+              <div class="field-row"><label for="quality">Quality</label><output id="qualityValue">82</output></div>
+              <input id="quality" type="range" min="10" max="100" value="82" />
+              <div class="range-labels"><span>Smaller</span><span>Higher quality</span></div>
+            </div>
+
+            <div class="field toggle-field">
+              <div><label for="targetToggle">Target file size</label><small>Automatically finds the best size and quality.</small></div>
+              <input id="targetToggle" class="switch" type="checkbox" />
+            </div>
+            <div id="targetWrap" class="field compact hidden">
+              <label for="targetKb">Maximum size</label>
+              <div class="input-suffix"><input id="targetKb" type="number" min="10" max="102400" value="200" /><span>KB</span></div>
+            </div>
+
+            <div class="field toggle-field">
+              <div><label for="resizeToggle">Resize images</label><small>Keep aspect ratio by default.</small></div>
+              <input id="resizeToggle" class="switch" type="checkbox" />
+            </div>
+            <div id="resizeWrap" class="resize-grid hidden">
+              <div class="field compact"><label for="width">Width</label><div class="input-suffix"><input id="width" type="number" min="1" placeholder="Auto" /><span>px</span></div></div>
+              <div class="field compact"><label for="height">Height</label><div class="input-suffix"><input id="height" type="number" min="1" placeholder="Auto" /><span>px</span></div></div>
+              <label class="check-row"><input id="keepAspect" type="checkbox" checked /> Keep aspect ratio</label>
+            </div>
+
+            <div class="field">
+              <label>Output folder</label>
+              <button id="outputFolderBtn" class="folder-picker"><span id="outputFolderText">Choose a folder</span><span>Browse</span></button>
+            </div>
+
+            <div class="field">
+              <label for="suffix">Filename suffix</label>
+              <input id="suffix" type="text" value="-compressed" maxlength="40" />
+            </div>
+
+            <button id="processBtn" class="btn primary wide">Process Images</button>
+            <div id="progressWrap" class="progress-wrap hidden"><div class="progress-track"><div id="progressBar" class="progress-bar"></div></div><span id="progressText">Processing…</span></div>
+          </aside>
+        </section>
+
+        <section id="resultSummary" class="result-summary hidden">
+          <div><span>Original</span><strong id="totalOriginal">0 MB</strong></div>
+          <div><span>Output</span><strong id="totalOutput">0 MB</strong></div>
+          <div><span>Saved</span><strong id="totalSaved">0%</strong></div>
+          <button id="openFolderBtn" class="btn secondary">Open Output Folder</button>
+        </section>
+      </section>
+
+      <section id="historyView" class="view">
+        <header class="topbar"><div><h1>History</h1><p>Recent processing records stored only on this device.</p></div><button id="clearHistoryBtn" class="btn ghost">Clear history</button></header>
+        <div id="historyList" class="history-list"></div>
+      </section>
+
+      <section id="settingsView" class="view">
+        <header class="topbar"><div><h1>Settings</h1><p>Simple defaults for your local workflow.</p></div></header>
+        <div class="settings-card">
+          <div class="field"><label for="theme">Theme</label><select id="theme"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></div>
+          <div class="field toggle-field"><div><label for="overwrite">Overwrite existing files</label><small>If disabled, a number is added to duplicate filenames.</small></div><input id="overwrite" class="switch" type="checkbox" /></div>
+          <div class="field toggle-field"><div><label for="openAfter">Open folder after processing</label><small>Automatically show the output folder when done.</small></div><input id="openAfter" class="switch" type="checkbox" /></div>
+          <button id="saveSettingsBtn" class="btn primary">Save Settings</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>
